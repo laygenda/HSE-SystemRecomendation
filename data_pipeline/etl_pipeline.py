@@ -7,8 +7,8 @@ print("Mulai Proses Data Engineering (ETL Phase 1)...")
 # ==========================================
 # 1. EXTRACT (Menarik Data Mentah CSV)
 # ==========================================
-df_hse = pd.read_csv('C:\\Users\\laygenda surya putra\\Documents\\KULIAH\\Semester 4\\Rekomendasi Sistem\\Tugas\\HSE_recomendation\\data\\IHMStefanini_industrial_safety_and_health_database.csv')
-df_weather = pd.read_csv('C:\\Users\\laygenda surya putra\\Documents\\KULIAH\\Semester 4\\Rekomendasi Sistem\\Tugas\\HSE_recomendation\\data\\open-meteo-19.93S43.97W860m.csv', skiprows=3, sep=';')
+df_hse = pd.read_csv('C:\\Users\\laygenda surya putra\\Documents\\KULIAH\\Semester 4\\Rekomendasi Sistem\\Tugas\\CODE\\HSE-recomendation\\data_pipeline\\data\\IHMStefanini_industrial_safety_and_health_database.csv')
+df_weather = pd.read_csv('C:\\Users\\laygenda surya putra\\Documents\\KULIAH\\Semester 4\\Rekomendasi Sistem\\Tugas\\CODE\\HSE-recomendation\\data_pipeline\\data\\open-meteo-19.93S43.97W860m.csv', skiprows=3, sep=';')
 
 # ==========================================
 # 2. TRANSFORM (Pembersihan & Penggabungan)

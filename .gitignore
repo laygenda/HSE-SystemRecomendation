@@ -1,0 +1,15 @@
+# Environments
+venv/
+.env
+
+# Model Artifacts (Jangan upload model ratusan MB ke Git)
+ml_experiments/models/*.pkl
+*.joblib
+
+# Frontend
+frontend_app/node_modules/
+frontend_app/.next/
+
+# Python Cache
+__pycache__/
+*.pyc
