@@ -2,6 +2,7 @@ import os
 import sys
 import logging
 import pandas as pd
+from pathlib import Path
 from sqlalchemy import create_engine
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
@@ -9,31 +10,44 @@ import xgboost as xgb
 import joblib
 
 # ==========================================
-# 0. KONFIGURASI LOGGING PROFESIONAL
+# 0. KONFIGURASI LOGGING
 # ==========================================
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S',
+    format="%(asctime)s [%(levelname)s] - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
     handlers=[logging.StreamHandler(sys.stdout)]
 )
+
 logger = logging.getLogger(__name__)
 
-# Tentukan folder output agar file tidak berantakan
-OUTPUT_DIR = "ml_experiments"
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+# ==========================================
+# 1. PATH YANG BENAR (SUDAH DI DALAM ml_experiments)
+# ==========================================
+# Jika script dijalankan dari folder:
+# HSE-recomendation/ml_experiments/
+# maka output langsung ke:
+# HSE-recomendation/ml_experiments/models/
+
+BASE_DIR = Path(__file__).resolve().parent
+OUTPUT_DIR = BASE_DIR / "models"
+
+# Pakai folder yang sudah ada
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
 
 def run_ml_pipeline():
     logger.info("=== Mulai Phase 2: Pipeline Training XGBoost ===")
-    
+
     # ==========================================
-    # 1. PULL DATA DARI DATABASE
+    # 2. AMBIL DATA DATABASE
     # ==========================================
     try:
-        logger.info("Menghubungkan ke database PostgreSQL...")
-        DATABASE_URI = 'postgresql://postgres:root@localhost:5432/hse_db'
+        logger.info("Menghubungkan ke PostgreSQL...")
+
+        DATABASE_URI = "postgresql://postgres:root@localhost:5432/hse_db"
         engine = create_engine(DATABASE_URI)
-        
+
         query = """
         SELECT 
             p.sektor_industri, 
@@ -47,72 +61,90 @@ def run_ml_pipeline():
         JOIN dim_pekerjaan p ON f.id_pekerjaan = p.id_pekerjaan
         JOIN dim_cuaca c ON f.id_cuaca = c.id_cuaca
         """
+
         df = pd.read_sql(query, engine)
-        logger.info(f"Berhasil menarik {len(df)} baris data untuk dilatih.")
-        
+
+        logger.info(f"Berhasil mengambil {len(df)} data.")
+
     except Exception as e:
-        logger.error(f"GAGAL menarik data dari database! Error: {e}")
-        sys.exit(1) # Hentikan program jika gagal ambil data
-
-    # ==========================================
-    # 2. FEATURE ENGINEERING (Persiapan Data)
-    # ==========================================
-    try:
-        logger.info("Memulai Feature Engineering (Preprocessing)...")
-        le_target = LabelEncoder()
-        df['target'] = le_target.fit_transform(df['potensi_keparahan'])
-
-        X = df.drop(columns=['potensi_keparahan', 'target'])
-        y = df['target']
-
-        X = pd.get_dummies(X, columns=['sektor_industri', 'risiko_kritis'])
-        kolom_fitur = list(X.columns)
-
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-        logger.info(f"Data dipecah: {len(X_train)} data training, {len(X_test)} data testing.")
-        
-    except Exception as e:
-        logger.error(f"GAGAL melakukan Feature Engineering! Error: {e}")
+        logger.error(f"Gagal ambil data: {e}")
         sys.exit(1)
 
     # ==========================================
-    # 3. TRAINING MODEL XGBOOST
+    # 3. PREPROCESSING
     # ==========================================
     try:
-        logger.info("Melatih model algoritma XGBoost Classifier...")
+        logger.info("Feature Engineering...")
+
+        le_target = LabelEncoder()
+        df["target"] = le_target.fit_transform(df["potensi_keparahan"])
+
+        X = df.drop(columns=["potensi_keparahan", "target"])
+        y = df["target"]
+
+        X = pd.get_dummies(
+            X,
+            columns=["sektor_industri", "risiko_kritis"]
+        )
+
+        kolom_fitur = list(X.columns)
+
+        X_train, X_test, y_train, y_test = train_test_split(
+            X,
+            y,
+            test_size=0.2,
+            random_state=42
+        )
+
+        logger.info(
+            f"Train: {len(X_train)} | Test: {len(X_test)}"
+        )
+
+    except Exception as e:
+        logger.error(f"Gagal preprocessing: {e}")
+        sys.exit(1)
+
+    # ==========================================
+    # 4. TRAINING MODEL
+    # ==========================================
+    try:
+        logger.info("Training XGBoost...")
+
         model = xgb.XGBClassifier(
-            objective='multi:softprob', 
-            eval_metric='mlogloss', 
+            objective="multi:softprob",
+            eval_metric="mlogloss",
             use_label_encoder=False,
             random_state=42
         )
+
         model.fit(X_train, y_train)
-        logger.info("Proses training model selesai dengan sukses.")
-        
+
+        logger.info("Training selesai.")
+
     except Exception as e:
-        logger.error(f"GAGAL melatih model XGBoost! Error: {e}")
+        logger.error(f"Gagal training: {e}")
         sys.exit(1)
 
     # ==========================================
-    # 4. EVALUASI & EXPORT MODEL
+    # 5. EVALUASI & SIMPAN
     # ==========================================
     try:
-        logger.info("Mengevaluasi akurasi model pada data testing...")
         akurasi = model.score(X_test, y_test)
-        logger.info(f"Evaluasi Selesai! Akurasi Model: {akurasi * 100:.2f}%")
 
-        logger.info(f"Menyimpan file model ke folder '{OUTPUT_DIR}'...")
-        # Simpan file langsung ke dalam folder ml_experiments
-        joblib.dump(model, os.path.join(OUTPUT_DIR, 'xgb_model.pkl'))
-        joblib.dump(kolom_fitur, os.path.join(OUTPUT_DIR, 'model_columns.pkl'))
-        joblib.dump(le_target, os.path.join(OUTPUT_DIR, 'target_encoder.pkl'))
-        
-        logger.info("SELURUH PIPELINE PHASE 2 SELESAI DENGAN SUKSES!")
-        
+        logger.info(f"Akurasi: {akurasi * 100:.2f}%")
+
+        logger.info(f"Menyimpan ke: {OUTPUT_DIR}")
+
+        joblib.dump(model, OUTPUT_DIR / "xgb_model.pkl")
+        joblib.dump(kolom_fitur, OUTPUT_DIR / "model_columns.pkl")
+        joblib.dump(le_target, OUTPUT_DIR / "target_encoder.pkl")
+
+        logger.info("Semua file berhasil disimpan.")
+
     except Exception as e:
-        logger.error(f"GAGAL menyimpan file model! Error: {e}")
+        logger.error(f"Gagal simpan model: {e}")
         sys.exit(1)
 
-# Trigger utama untuk menjalankan script
+
 if __name__ == "__main__":
     run_ml_pipeline()
