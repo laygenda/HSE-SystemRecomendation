@@ -40,3 +40,27 @@ export const getHSERecommendation = async (data: PredictionRequest): Promise<Rec
     throw error;
   }
 };
+
+//  Tipe data untuk Peta dari PostgreSQL 
+export interface MapIncidentData {
+  id_insiden: number;
+  sektor_industri: string;
+  risiko_kritis: string;
+  suhu_c: number;
+  angin_kmh: number;
+  jam_kerja_sebelum_insiden: number;
+  potensi_keparahan: string;
+  latitude: number;
+  longitude: number;
+}
+
+// Fungsi untuk mengambil data peta
+export const getLiveMapData = async (): Promise<MapIncidentData[]> => {
+  try {
+    const response = await apiClient.get<MapIncidentData[]>('/api/live-map-data');
+    return response.data;
+  } catch (error) {
+    console.error("Gagal mengambil data peta live:", error);
+    return [];
+  }
+};
