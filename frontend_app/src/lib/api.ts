@@ -64,3 +64,19 @@ export const getLiveMapData = async (): Promise<MapIncidentData[]> => {
     return [];
   }
 };
+
+export interface WeeklyTrendData {
+  tanggal: string;
+  risiko_tinggi: number;
+  risiko_rendah: number;
+}
+
+export const getWeeklyTrend = async (): Promise<WeeklyTrendData[]> => {
+  try {
+    const response = await apiClient.get<WeeklyTrendData[]>('/api/weekly-trend');
+    return response.data;
+  } catch (error) {
+    console.error("Gagal mengambil data tren mingguan:", error);
+    return [];
+  }
+};

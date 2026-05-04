@@ -1,9 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-// FIX 1: Import getLiveMapData dan MapIncidentData agar TypeScript tidak error
-import { getHSERecommendation, RecommendationResponse, PredictionRequest, getLiveMapData, MapIncidentData } from '../lib/api';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { getHSERecommendation, RecommendationResponse, PredictionRequest, getLiveMapData, MapIncidentData, getWeeklyTrend, WeeklyTrendData } from '../lib/api';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, CartesianGrid, Legend } from 'recharts';
 import dynamic from 'next/dynamic'; 
 
 const DynamicRiskMap = dynamic(() => import('../components/RiskMap'), { 
@@ -14,27 +13,38 @@ const DynamicRiskMap = dynamic(() => import('../components/RiskMap'), {
 export default function Dashboard() {
   const [aiData, setAiData] = useState<RecommendationResponse | null>(null);
   const [mapData, setMapData] = useState<MapIncidentData[]>([]);
-  // FIX 3: Tambahkan state ini untuk melacak insiden mana yang sedang diklik user
+  const [trendData, setTrendData] = useState<WeeklyTrendData[]>([]); 
   const [selectedIncident, setSelectedIncident] = useState<MapIncidentData | null>(null); 
   
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isMapLoading, setIsMapLoading] = useState<boolean>(true);
 
-  const fetchMapData = async () => {
+  // FIX UTAMA: Menarik data Peta dan Tren sekaligus secara paralel
+  const fetchDashboardData = async () => {
     setIsMapLoading(true);
-    const data = await getLiveMapData();
-    setMapData(data);
-    setIsMapLoading(false);
-    
-    // Otomatis klik titik pertama saat web baru dibuka
-    if (data.length > 0) {
-      handleAnalyzeIncident(data[0]);
+    try {
+      const [mapResult, trendResult] = await Promise.all([
+        getLiveMapData(),
+        getWeeklyTrend()
+      ]);
+
+      setMapData(mapResult);
+      setTrendData(trendResult); // Menyuntikkan data ke Line Chart!
+
+      // Otomatis klik titik pertama saat web baru dibuka
+      if (mapResult.length > 0) {
+        handleAnalyzeIncident(mapResult[0]);
+      }
+    } catch (error) {
+      console.error("Gagal mengambil data dashboard:", error);
+    } finally {
+      setIsMapLoading(false);
     }
   };
 
   const handleAnalyzeIncident = async (incident: MapIncidentData) => {
     setIsLoading(true);
-    setSelectedIncident(incident); // Simpan data titik yang sedang dianalisis ke UI
+    setSelectedIncident(incident); 
     
     try {
       const payload: PredictionRequest = {
@@ -55,7 +65,7 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    fetchMapData();
+    fetchDashboardData();
   }, []);
 
   return (
@@ -68,10 +78,10 @@ export default function Dashboard() {
           <p className="text-sm text-slate-500 mt-1">Real-time Context-Aware Risk Intervention System</p>
         </div>
         <button 
-          onClick={fetchMapData}
+          onClick={fetchDashboardData}
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
         >
-          {isMapLoading ? "Syncing DB..." : "Refresh Map Data"}
+          {isMapLoading ? "Syncing DB..." : "Refresh Dashboard"}
         </button>
       </header>
 
@@ -91,7 +101,6 @@ export default function Dashboard() {
           </span>
         </div>
         
-        {/* FIX 3: KPI Angin sekarang membaca langsung dari titik peta yang diklik, bukan angka mati */}
         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 h-24 flex flex-col justify-center">
            <span className="text-xs text-slate-500 font-semibold uppercase">Current Wind</span>
            <span className={`text-xl font-bold mt-1 ${selectedIncident && selectedIncident.angin_kmh > 25 ? 'text-orange-500' : 'text-emerald-600'}`}>
@@ -99,7 +108,6 @@ export default function Dashboard() {
            </span>
         </div>
 
-        {/* Anda bisa mengubah KPI 4,5,6 ini untuk Suhu atau Kelelahan nantinya */}
         {[4, 5, 6].map((num) => (
            <div key={num} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 h-24 flex items-center justify-center text-slate-300 font-medium text-sm">
              KPI {num}
@@ -118,14 +126,29 @@ export default function Dashboard() {
               {isMapLoading && <span className="text-xs text-blue-500 font-normal animate-pulse">Syncing...</span>}
             </h2>
             <div className="flex-1 w-full bg-slate-50 rounded overflow-hidden z-0 border border-slate-200">
-                 {/* FIX 2: Menyambungkan Peta dengan Kabel Data dan Kabel Event Klik */}
                  <DynamicRiskMap data={mapData} onMarkerClick={handleAnalyzeIncident} />
             </div>
           </section>
 
-          <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-[300px]">
+          <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-[300px] flex flex-col">
             <h2 className="text-lg font-semibold mb-4 border-b pb-2">Weekly Risk Trend</h2>
-            <div className="w-full h-4/5 bg-slate-50 border border-dashed border-slate-300 rounded flex items-center justify-center text-slate-400">[ Recharts Line Component ]</div>
+            <div className="flex-1 w-full text-sm min-h-[200px] relative">
+              {trendData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={trendData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <XAxis dataKey="tanggal" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                    <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
+                    <Line type="monotone" name="Risiko Tinggi (Level IV-VI)" dataKey="risiko_tinggi" stroke="#ef4444" strokeWidth={3} dot={{ r: 4, fill: '#ef4444', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
+                    <Line type="monotone" name="Risiko Rendah (Level I-III)" dataKey="risiko_rendah" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4, fill: '#f59e0b', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-slate-400 animate-pulse">Menghitung Agregasi Data...</div>
+              )}
+            </div>
           </section>
         </div>
 
@@ -183,6 +206,13 @@ export default function Dashboard() {
         </div>
 
       </div>
+
+      {/* FIX: Mengembalikan Section MLOps Monitoring yang tidak sengaja terhapus */}
+      <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-8">
+        <h2 className="text-lg font-semibold mb-4 border-b pb-2">MLOps Model Performance</h2>
+        <div className="w-full h-32 bg-slate-50 border border-dashed border-slate-300 rounded flex items-center justify-center text-slate-400">[ MLOps Table Component ]</div>
+      </section>
+
     </div>
   );
 }

@@ -33,3 +33,8 @@ class MapIncidentData(BaseModel):
     potensi_keparahan: str
     latitude: float
     longitude: float
+    
+class WeeklyTrendData(BaseModel):
+    tanggal: str
+    risiko_tinggi: int
+    risiko_rendah: int
